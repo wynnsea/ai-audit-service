@@ -1,0 +1,12 @@
+# rahasia tidak boleh ikut masuk image; env dikirim saat container jalan (env_file di compose)
+.env
+.env.*
+!.env.example
+
+.git
+tmp/
+*.exe
+t*.json
+Dockerfile
+.dockerignore
+docker-compose.yml

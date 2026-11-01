@@ -1,0 +1,25 @@
+# Menjalankan Go service + Next.js bersama. Supabase dan AI server tetap di luar (cloud / server internal).
+#   docker compose up -d --build
+services:
+  api:
+    build: .
+    # rahasia dibaca saat container jalan, tidak ikut masuk image
+    env_file: .env
+    environment:
+      PORT: "8081"
+      TZ: Asia/Jakarta
+    ports:
+      - "8081:8081"
+    restart: unless-stopped
+
+  web:
+    build:
+      context: ../ai-audit
+      args:
+        # "api" = nama service di atas; Docker menyediakan DNS antar container dengan nama ini
+        API_URL: http://api:8081
+    ports:
+      - "3000:3000"
+    depends_on:
+      - api
+    restart: unless-stopped
