@@ -47,7 +47,7 @@ func main() {
 	healthCtrl := controller.NewHealthController(db)
 	docCtrl := controller.NewDocumentController(docUC)
 	chatRepo := repository.NewChatRepository(db)
-	chatUc := usecase.NewChatUsecase(chatRepo, chunk, aiClient, aiClient, aiClient) // aiClient = embedder, reranker, LLM
+	chatUc := usecase.NewChatUsecase(chatRepo, chunk, aiClient, aiClient, aiClient, cfg.ChatModels) // aiClient = embedder, reranker, LLM
 	chatCtrl := controller.NewChatController(chatUc)
 
 	handler := router.New(healthCtrl, docCtrl, *chatCtrl)

@@ -9,10 +9,10 @@ import (
 	"fmt"
 	"log"
 	"regexp"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
-
 )
 
 const (
@@ -27,7 +27,7 @@ const (
 	// batas total isi kutipan (±3-4rb token) supaya prompt tetap jauh di bawah context 16k
 	maxContextChars = 12000
 	// hasil tes UU PDP: chunk relevan dapat skor >= 0.9, pertanyaan di luar dokumen <= 0.02
-	minRerankScore = 0.3
+	minRerankScore = 0.05
 	// pesan sebelumnya yang ikut dikirim supaya bisa tanya lanjutan
 	historyMessages = 6
 	// Qwen3-Embedding dilatih dengan instruksi di sisi query (dokumen tanpa instruksi)
@@ -44,22 +44,27 @@ var (
 	citation = regexp.MustCompile(`\[(\d+)\]`)
 )
 
-
 var (
 	ErrEmptyQuestion   = errors.New("question is required")
 	ErrSessionNotFound = errors.New("chat session not found")
+	ErrUnknownModel    = errors.New("model is not available")
+	ErrEmptyTitle      = errors.New("title is required")
 )
 
 type ChunkSearcher interface {
-	SearchSimilar(ctx context.Context, embedding []float32, limit int) ([]entity.SearchResult, error)
+	SearchSimilar(ctx context.Context, embedding []float32, limit int, documentIDs []string) ([]entity.SearchResult, error)
 	FindByPasal(ctx context.Context, documentID string, numbers []string) ([]entity.SearchResult, error)
 	FindReferencing(ctx context.Context, documentID, number string) ([]entity.SearchResult, error)
 }
 
 type ChatRepository interface {
-	CreateSession(ctx context.Context, title string) (*entity.ChatSession, error)
+	CreateSession(ctx context.Context, title string, documentIDs []string) (*entity.ChatSession, error)
+	SetSessionDocuments(ctx context.Context, id string, documentIDs []string) error
 	FindSession(ctx context.Context, id string) (*entity.ChatSession, error)
 	ListSessions(ctx context.Context) ([]entity.ChatSession, error)
+	RenameSession(ctx context.Context, id, title string) error
+	DeleteSession(ctx context.Context, id string) error
+	TouchSession(ctx context.Context, id string) error
 	AddMessage(ctx context.Context, m *entity.ChatMessage) error
 	ListMessages(ctx context.Context, sessionID string) ([]entity.ChatMessage, error)
 }
@@ -70,11 +75,15 @@ type Reranker interface {
 
 type LLM interface {
 	Chat(ctx context.Context, messages []ai.Message) (string, error)
+	ChatWith(ctx context.Context, model string, messages []ai.Message) (string, error)
 }
 
 type AskInput struct {
 	SessionID string
 	Question  string
+	Model     string // kosong = model default
+	// dokumen yang boleh dipakai; kosong = semua dokumen
+	DocumentIDs []string
 }
 
 type AskOutput struct {
@@ -82,6 +91,7 @@ type AskOutput struct {
 	SearchQuery string          `json:"search_query"`
 	Answer      string          `json:"answer"`
 	Sources     []entity.Source `json:"sources"`
+	Model       string          `json:"model,omitempty"`
 }
 
 type ChatUsecase struct {
@@ -90,10 +100,11 @@ type ChatUsecase struct {
 	embedder Embedder
 	reranker Reranker
 	llm      LLM
+	models   []string // model yang boleh dipilih user; yang pertama = default
 }
 
-func NewChatUsecase(chats ChatRepository, chunks ChunkSearcher, embedder Embedder, reranker Reranker, llm LLM) *ChatUsecase {
-	return &ChatUsecase{chats: chats, chunks: chunks, embedder: embedder, reranker: reranker, llm: llm}
+func NewChatUsecase(chats ChatRepository, chunks ChunkSearcher, embedder Embedder, reranker Reranker, llm LLM, models []string) *ChatUsecase {
+	return &ChatUsecase{chats: chats, chunks: chunks, embedder: embedder, reranker: reranker, llm: llm, models: models}
 }
 
 func (u *ChatUsecase) Ask(ctx context.Context, in AskInput) (*AskOutput, error) {
@@ -102,9 +113,18 @@ func (u *ChatUsecase) Ask(ctx context.Context, in AskInput) (*AskOutput, error) 
 		return nil, ErrEmptyQuestion
 	}
 
+	model := in.Model
+	if model == "" {
+		model = u.models[0]
+	}
+	// daftar ini mencegah user memanggil model lain yang ada di gateway
+	if !slices.Contains(u.models, model) {
+		return nil, ErrUnknownModel
+	}
+
 	timer := newStepTimer()
 
-	sessionID, history, err := u.prepareSession(ctx, in.SessionID, question)
+	sessionID, history, err := u.prepareSession(ctx, in.SessionID, question, in.DocumentIDs)
 	timer.lap("session")
 	if err != nil {
 		return nil, err
@@ -113,7 +133,7 @@ func (u *ChatUsecase) Ask(ctx context.Context, in AskInput) (*AskOutput, error) 
 	searchQuery := u.standaloneQuestion(ctx, history, question)
 	timer.lap("rewrite")
 
-	sources, err := u.retrieve(ctx, searchQuery, timer)
+	sources, err := u.retrieve(ctx, searchQuery, in.DocumentIDs, timer)
 	if err != nil {
 		return nil, err
 	}
@@ -122,9 +142,10 @@ func (u *ChatUsecase) Ask(ctx context.Context, in AskInput) (*AskOutput, error) 
 	}
 
 	// tanpa sumber yang relevan, LLM tidak dipanggil sama sekali, jadi tidak ada peluang mengarang
-	answer := notFoundAnswer
+	answer, answeredBy := notFoundAnswer, ""
 	if len(sources) > 0 {
-		answer, err = u.llm.Chat(ctx, buildMessages(history, sources, question))
+		answeredBy = model
+		answer, err = u.llm.ChatWith(ctx, model, buildMessages(history, sources, question))
 		if err != nil {
 			return nil, fmt.Errorf("generate answer: %w", err)
 		}
@@ -132,30 +153,38 @@ func (u *ChatUsecase) Ask(ctx context.Context, in AskInput) (*AskOutput, error) 
 	}
 	timer.lap("llm")
 
-	if err := u.saveExchange(ctx, sessionID, question, answer, sources); err != nil {
+	if err := u.saveExchange(ctx, sessionID, question, answer, answeredBy, sources); err != nil {
 		return nil, err
 	}
 	timer.lap("save")
 
-	log.Printf("chat ask: %s sources=%d query=%q", timer, len(sources), searchQuery)
-	return &AskOutput{SessionID: sessionID, Answer: answer, Sources: sources, SearchQuery: searchQuery}, nil
+	// log.Printf("chat ask: %s sources=%d query=%q", timer, len(sources), searchQuery)
+	log.Printf("chat ask: %s model=%q documents=%d sources=%d query=%q", timer, answeredBy, len(in.DocumentIDs), len(sources), searchQuery)
+	return &AskOutput{SessionID: sessionID, Answer: answer, Sources: sources, SearchQuery: searchQuery, Model: answeredBy}, nil
 }
 
-// prepareSession membuat sesi baru atau mengambil riwayat sesi yang ada
-func (u *ChatUsecase) prepareSession(ctx context.Context, sessionID, question string) (string, []ai.Message, error) {
+// prepareSession membuat sesi baru atau mengambil riwayat sesi yang ada, lalu mencatat
+// dokumen yang dipilih supaya pilihannya kembali saat sesi dibuka lagi
+func (u *ChatUsecase) prepareSession(ctx context.Context, sessionID, question string, documentIDs []string) (string, []ai.Message, error) {
 	if sessionID == "" {
-		s, err := u.chats.CreateSession(ctx, sessionTitle(question))
+		s, err := u.chats.CreateSession(ctx, sessionTitle(question), documentIDs)
 		if err != nil {
 			return "", nil, fmt.Errorf("create session: %w", err)
 		}
 		return s.ID, nil, nil
 	}
 
-	if _, err := u.chats.FindSession(ctx, sessionID); err != nil {
+	session, err := u.chats.FindSession(ctx, sessionID)
+	if err != nil {
 		if errors.Is(err, repository.ErrNotFound) {
 			return "", nil, ErrSessionNotFound
 		}
 		return "", nil, fmt.Errorf("find session: %w", err)
+	}
+	if !slices.Equal(session.DocumentIDs, documentIDs) {
+		if err := u.chats.SetSessionDocuments(ctx, sessionID, documentIDs); err != nil {
+			return "", nil, fmt.Errorf("update session documents: %w", err)
+		}
 	}
 
 	messages, err := u.chats.ListMessages(ctx, sessionID)
@@ -193,14 +222,14 @@ func (u *ChatUsecase) standaloneQuestion(ctx context.Context, history []ai.Messa
 }
 
 // retrieve: embed pertanyaan → vector search → rerank → ambil yang relevan
-func (u *ChatUsecase) retrieve(ctx context.Context, question string, timer *stepTimer) ([]entity.Source, error) {
+func (u *ChatUsecase) retrieve(ctx context.Context, question string, documentIDs []string, timer *stepTimer) ([]entity.Source, error) {
 	vectors, err := u.embedder.Embed(ctx, []string{queryInstruction + question})
 	if err != nil {
 		return nil, fmt.Errorf("embed question: %w", err)
 	}
 	timer.lap("embed")
 
-	candidates, err := u.chunks.SearchSimilar(ctx, vectors[0], searchCandidates)
+	candidates, err := u.chunks.SearchSimilar(ctx, vectors[0], searchCandidates, documentIDs)
 	if err != nil {
 		return nil, err
 	}
@@ -318,20 +347,54 @@ func pasalNumber(section string) string {
 	return ""
 }
 
-func (u *ChatUsecase) saveExchange(ctx context.Context, sessionID, question, answer string, sources []entity.Source) error {
+func (u *ChatUsecase) saveExchange(ctx context.Context, sessionID, question, answer, model string, sources []entity.Source) error {
 	userMsg := &entity.ChatMessage{SessionID: sessionID, Role: entity.RoleUser, Content: question}
 	if err := u.chats.AddMessage(ctx, userMsg); err != nil {
 		return fmt.Errorf("save question: %w", err)
 	}
-	botMsg := &entity.ChatMessage{SessionID: sessionID, Role: entity.RoleAssistant, Content: answer, Sources: sources}
+	botMsg := &entity.ChatMessage{SessionID: sessionID, Role: entity.RoleAssistant, Content: answer, Sources: sources, Model: model}
 	if err := u.chats.AddMessage(ctx, botMsg); err != nil {
 		return fmt.Errorf("save answer: %w", err)
+	}
+	if err := u.chats.TouchSession(ctx, sessionID); err != nil {
+		return fmt.Errorf("touch session: %w", err)
 	}
 	return nil
 }
 
+func (u *ChatUsecase) ChatModels() []string {
+	return u.models
+}
+
 func (u *ChatUsecase) ListSessions(ctx context.Context) ([]entity.ChatSession, error) {
 	return u.chats.ListSessions(ctx)
+}
+
+func (u *ChatUsecase) RenameSession(ctx context.Context, id, title string) (string, error) {
+	title = strings.Join(strings.Fields(title), " ")
+	if title == "" {
+		return "", ErrEmptyTitle
+	}
+	if r := []rune(title); len(r) > maxTitleRunes {
+		title = string(r[:maxTitleRunes])
+	}
+	if err := u.chats.RenameSession(ctx, id, title); err != nil {
+		if errors.Is(err, repository.ErrNotFound) {
+			return "", ErrSessionNotFound
+		}
+		return "", err
+	}
+	return title, nil
+}
+
+func (u *ChatUsecase) DeleteSession(ctx context.Context, id string) error {
+	if err := u.chats.DeleteSession(ctx, id); err != nil {
+		if errors.Is(err, repository.ErrNotFound) {
+			return ErrSessionNotFound
+		}
+		return err
+	}
+	return nil
 }
 
 func (u *ChatUsecase) ListMessages(ctx context.Context, sessionID string) ([]entity.ChatMessage, error) {

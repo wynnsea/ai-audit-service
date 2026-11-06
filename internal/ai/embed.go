@@ -38,7 +38,7 @@ func (c *Client) Embed(ctx context.Context, texts []string) ([][]float32, error)
 func (c *Client) embedBatch(ctx context.Context, texts []string) ([][]float32, error) {
 	var resp embedResponse
 	req := embedRequest{Model: c.cfg.EmbedModel, Input: texts}
-	if err := c.post(ctx, c.cfg.EmbedBaseURL+"/embeddings", req, &resp); err != nil {
+	if err := c.post(ctx, c.cfg.EmbedBaseURL+"/embeddings", c.cfg.EmbedModel, req, &resp); err != nil {
 		return nil, err
 	}
 	if len(resp.Data) != len(texts) {

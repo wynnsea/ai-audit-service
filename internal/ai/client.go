@@ -40,7 +40,7 @@ func NewClient(cfg Config) *Client {
 	}
 }
 
-func (c *Client) post(ctx context.Context, url string, reqBody, respBody any) error {
+func (c *Client) post(ctx context.Context, url, model string, reqBody, respBody any) error {
 	payload, err := json.Marshal(reqBody)
 	if err != nil {
 		return fmt.Errorf("marshal request: %w", err)
@@ -64,7 +64,7 @@ func (c *Client) post(ctx context.Context, url string, reqBody, respBody any) er
 		return fmt.Errorf("ai %s: %w", url, err)
 	}
 	defer resp.Body.Close()
-	log.Printf("ai %s %d %s", url, resp.StatusCode, time.Since(start).Round(time.Millisecond))
+	log.Printf("ai %s model=%q %d %s", url, model, resp.StatusCode, time.Since(start).Round(time.Millisecond))
 
 	if resp.StatusCode >= 300 {
 		body, _ := io.ReadAll(io.LimitReader(resp.Body, 2048))

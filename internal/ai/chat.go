@@ -34,15 +34,20 @@ type chatResponse struct {
 var thinkTag = regexp.MustCompile(`(?s)<think>.*?</think>`)
 
 func (c *Client) Chat(ctx context.Context, messages []Message) (string, error) {
+	return c.ChatWith(ctx, c.cfg.ChatModel, messages)
+}
+
+// ChatWith sama dengan Chat, tapi memakai model yang dipilih
+func (c *Client) ChatWith(ctx context.Context, model string, messages []Message) (string, error) {
 	var resp chatResponse
 		req := chatRequest{
-			Model:    c.cfg.ChatModel,
+			Model:    model,
 			Messages: messages,
 			Temperature: 0.1,
 			ChatTemplateKwargs: map[string]any{"enable_thinking": false},
 		}
 
-	if err := c.post(ctx, c.cfg.ChatBaseURL+"/chat/completions", req, &resp); err != nil {
+	if err := c.post(ctx, c.cfg.ChatBaseURL+"/chat/completions", model, req, &resp); err != nil {
 		return "", err
 	}
 	if len(resp.Choices) == 0 {

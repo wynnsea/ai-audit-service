@@ -24,7 +24,7 @@ type rerankResponse struct {
 func (c *Client) Rerank(ctx context.Context, query string, documents []string) ([]float64, error) {
 	var resp rerankResponse
 	req := rerankRequest{Model: c.cfg.RerankModel, Query: query, Documents: documents}
-	if err := c.post(ctx, c.cfg.RerankBaseURL+"/rerank", req, &resp); err != nil {
+	if err := c.post(ctx, c.cfg.RerankBaseURL+"/rerank", c.cfg.RerankModel, req, &resp); err != nil {
 		return nil, err
 	}
 

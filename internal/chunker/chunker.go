@@ -13,6 +13,8 @@ const maxChunkChars = 2000
 type unit struct {
 	section string
 	lines   []line
+	// plain: bukan regulasi, jadi nomor "(1)" tidak berarti ayat
+	plain bool
 }
 
 var pasalHeading = regexp.MustCompile(`^Pasal \d+[A-Z]?$`)
@@ -25,7 +27,7 @@ func Split(pages []entity.Page) []entity.Chunk {
 	if looksLikeRegulation(lines) {
 		units = regulationUnits(lines)
 	} else {
-		units = []unit{{lines: lines}}
+		units = genericUnits(lines)
 	}
 
 	var chunks []entity.Chunk
@@ -82,7 +84,7 @@ func splitUnit(u unit) []entity.Chunk {
 		}
 		section := u.section
 		if len(groups) > 1 {
-			section = strings.TrimSpace(section + " " + partLabel(g, i))
+			section = strings.TrimSpace(section + " " + partLabel(g, i, u.plain))
 		}
 		chunks = append(chunks, entity.Chunk{Section: section, Page: g[0].page, Content: content})
 	}
@@ -90,9 +92,12 @@ func splitUnit(u unit) []entity.Chunk {
 }
 
 // partLabel memberi label potongan, contoh "ayat (2)-(4)"
-func partLabel(g []line, i int) string {
+func partLabel(g []line, i int, plain bool) string {
 	var first, last string
 	for _, l := range g {
+		if plain {
+			break
+		}
 		if m := ayatStart.FindStringSubmatch(l.text); m != nil {
 			if first == "" {
 				first = m[1]

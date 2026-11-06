@@ -59,7 +59,7 @@ func (c *Client) TranscribeImage(ctx context.Context, png []byte) (string, error
 	}
 
 	var resp chatResponse
-	if err := c.post(ctx, c.cfg.ChatBaseURL+"/chat/completions", req, &resp); err != nil {
+	if err := c.post(ctx, c.cfg.ChatBaseURL+"/chat/completions", c.cfg.ChatModel, req, &resp); err != nil {
 		return "", err
 	}
 	if len(resp.Choices) == 0 {

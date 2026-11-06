@@ -19,7 +19,8 @@ Aturan:
 5. Sebutkan pasal/klausul secara eksplisit (contoh: "Pasal 40 ayat (2)"). Nomor pasal WAJIB diambil dari label sumber tempat informasi itu berada, contoh: isi dari sumber "[3] Pasal 6" disebut Pasal 6. Jangan pernah menyimpulkan atau mengurutkan nomor pasal sendiri. Pasal sanksi sering berisi daftar nomor pasal yang dilanggar; jika pasal kewajiban yang ditanyakan tercantum dalam daftar itu, nyatakan dengan tegas bahwa pelanggarannya dikenai sanksi tersebut.
 6. Untuk pertanyaan yang meminta daftar (misalnya "apa saja"), sebutkan semua butir yang ada di KONTEKS.
 7. Tulis angka, jangka waktu, dan besaran sanksi persis seperti di dokumen.
-8. Jawab dengan bahasa yang sama dengan pertanyaan. Ringkas dan terstruktur.`
+8. Jawab dengan bahasa yang sama dengan pertanyaan. Ringkas dan terstruktur.
+9. Judul dokumen tertera di label tiap sumber. Jika pertanyaan menyebut dokumen atau penulis tertentu, jawab hanya dari sumber dokumen itu. Jangan menggabungkan isi dokumen berbeda seolah-olah berasal dari satu dokumen; jika jawaban memakai lebih dari satu dokumen, sebutkan nama dokumennya.`
 
 // buildMessages menyusun percakapan untuk LLM: aturan, riwayat chat, lalu konteks + pertanyaan baru
 func buildMessages(history []ai.Message, sources []entity.Source, question string) []ai.Message {

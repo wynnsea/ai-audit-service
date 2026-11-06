@@ -16,7 +16,10 @@ func New(health *controller.HealthController, docs *controller.DocumentControlle
 	mux.HandleFunc("GET /documents/{id}", docs.Get)
 
 	mux.HandleFunc("POST /chat", chat.Ask)
+	mux.HandleFunc("GET /chat/models", chat.ListModels)
 	mux.HandleFunc("GET /chat/sessions", chat.ListSessions)
+	mux.HandleFunc("PATCH /chat/sessions/{id}", chat.RenameSession)
+	mux.HandleFunc("DELETE /chat/sessions/{id}", chat.DeleteSession)
 	mux.HandleFunc("GET /chat/sessions/{id}/messages", chat.ListMessages)
 
 	return logRequests(mux)

@@ -3,10 +3,11 @@ package config
 import (
 	"log"
 	"os"
+	"slices"
+	"strings"
 	"time"
 
 	"github.com/joho/godotenv"
-
 )
 
 type Config struct {
@@ -16,6 +17,7 @@ type Config struct {
 	AIAPIKey    string
 	AITimeout   time.Duration
 	ChatModel   string
+	ChatModels  []string
 	EmbedModel  string
 	SupabaseURL        string
 	SupabaseServiceKey string
@@ -31,13 +33,13 @@ func Load() *Config {
 		log.Println("no .env file found, using system env")
 	}
 
+	chatModel := mustEnv("CHAT_MODEL")
 	
 	return &Config{
 		Port:        getEnv("PORT", "8080"),
 		DatabaseURL: mustEnv("DATABASE_URL"),
 		AIBaseURL:   mustEnv("AI_BASE_URL"),
 		AIAPIKey:    os.Getenv("AI_API_KEY"),
-		ChatModel:   mustEnv("CHAT_MODEL"),
 		AITimeout:   getDuration("AI_TIMEOUT", 60*time.Second),
 		SupabaseURL: mustEnv("SUPABASE_URL"),
 		SupabaseServiceKey: mustEnv("SUPABASE_SERVICE_KEY"),
@@ -46,6 +48,8 @@ func Load() *Config {
 		EmbedModel:  mustEnv("EMBED_MODEL"),
 		RerankBaseURL:  mustEnv("RERANK_BASE_URL"),
 		RerankModel:  mustEnv("RERANK_MODEL"),
+		ChatModel:   chatModel,
+		ChatModels: parseModels(os.Getenv("CHAT_MODELS"), chatModel),
 	}
 }
 
@@ -74,4 +78,15 @@ func getDuration(key string, fallback time.Duration) time.Duration {
 		log.Fatalf("env %s: invalid duration %q", key, v)
 	}
 	return d
+}
+
+// parseModels membaca daftar model dipisah koma. Model default selalu di urutan pertama.
+func parseModels(list, defaultModel string) []string {
+	models := []string{defaultModel}
+	for _, m := range strings.Split(list, ",") {
+		if m = strings.TrimSpace(m); m != "" && !slices.Contains(models, m) {
+			models = append(models, m)
+		}
+	}
+	return models
 }

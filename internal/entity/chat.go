@@ -29,9 +29,13 @@ const (
 )
 
 type ChatSession struct {
-	ID        string    `json:"id"`
-	Title     string    `json:"title"`
-	CreatedAt time.Time `json:"created_at"`
+	ID    string `json:"id"`
+	Title string `json:"title"`
+	// dokumen yang boleh dipakai sesi ini; kosong = semua dokumen
+	DocumentIDs []string  `json:"document_ids,omitempty"`
+	CreatedAt   time.Time `json:"created_at"`
+	// waktu pesan terakhir; dasar urutan riwayat
+	LastMessageAt time.Time `json:"last_message_at"`
 }
 
 type ChatMessage struct {
@@ -41,4 +45,5 @@ type ChatMessage struct {
 	Content   string    `json:"content"`
 	Sources   []Source  `json:"sources,omitempty"`
 	CreatedAt time.Time `json:"created_at"`
+	Model     string    `json:"model,omitempty"`
 }

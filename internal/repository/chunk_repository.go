@@ -57,8 +57,22 @@ const searchColumns = `c.id, c.document_id, d.title, coalesce(c.section, ''), co
 // nomor Pasal dari section, contoh "BAB VI ... > Pasal 40 ayat (2)" → "40"
 const sectionPasal = `substring(c.section from '(?:^|> )Pasal ([0-9]+[A-Z]?)')`
 
-// SearchSimilar mencari chunk dengan embedding paling mirip (cosine) dari dokumen yang sudah ready
-func (r *ChunkRepository) SearchSimilar(ctx context.Context, embedding []float32, limit int) ([]entity.SearchResult, error) {
+// SearchSimilar mencari chunk dengan embedding paling mirip (cosine) dari dokumen yang sudah ready.
+// documentIDs membatasi pencarian ke dokumen tertentu; kosong = semua dokumen.
+func (r *ChunkRepository) SearchSimilar(ctx context.Context, embedding []float32, limit int, documentIDs []string) ([]entity.SearchResult, error) {
+	if len(documentIDs) > 0 {
+		// "+ 0" sengaja menghindari index hnsw: index mengambil kandidat terdekat dulu baru difilter,
+		// jadi dokumen kecil bisa tidak kebagian. Jumlah chunk per dokumen sedikit, cukup dihitung semua.
+		return r.search(ctx, `
+			select `+searchColumns+`, 1 - (c.embedding <=> $1::text::halfvec)
+			from document_chunks c
+			join documents d on d.id = c.document_id
+			where d.status = 'ready' and c.embedding is not null and c.document_id = any($3::uuid[])
+			order by (c.embedding <=> $1::text::halfvec) + 0
+			limit $2`,
+			vectorLiteral(embedding), limit, documentIDs)
+	}
+
 	// <=> = cosine distance (0 = identik), jadi similarity = 1 - distance
 	return r.search(ctx, `
 		select `+searchColumns+`, 1 - (c.embedding <=> $1::text::halfvec)
