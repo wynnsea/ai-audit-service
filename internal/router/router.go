@@ -13,7 +13,10 @@ func New(health *controller.HealthController, docs *controller.DocumentControlle
 
 	mux.HandleFunc("POST /documents", docs.Upload)
 	mux.HandleFunc("GET /documents", docs.List)
+	mux.HandleFunc("GET /documents/ocr-models", docs.ListOCRModels)
 	mux.HandleFunc("GET /documents/{id}", docs.Get)
+	mux.HandleFunc("GET /documents/{id}/file", docs.File)
+	mux.HandleFunc("DELETE /documents/{id}", docs.Delete)
 
 	mux.HandleFunc("POST /chat", chat.Ask)
 	mux.HandleFunc("GET /chat/models", chat.ListModels)

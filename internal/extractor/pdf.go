@@ -24,7 +24,7 @@ const (
 	ocrConcurrency = 4
 )
 
-func (e *Extractor) extractPDF(ctx context.Context, data []byte) ([]entity.Page, error) {
+func (e *Extractor) extractPDF(ctx context.Context, data []byte, model string) ([]entity.Page, error) {
 	dir, err := os.MkdirTemp("", "ingest-*")
 	if err != nil {
 		return nil, fmt.Errorf("create temp dir: %w", err)
@@ -57,7 +57,7 @@ func (e *Extractor) extractPDF(ctx context.Context, data []byte) ([]entity.Page,
 		}
 
 		g.Go(func() error {
-			ocrText, err := e.ocrPage(gctx, pdfPath, dir, num)
+			ocrText, err := e.ocrPage(gctx, pdfPath, dir, num, model)
 			if err != nil {
 				return fmt.Errorf("ocr page %d: %w", num, err)
 			}
@@ -142,7 +142,7 @@ func pageAreas(ctx context.Context, pdfPath string) (map[int]float64, error) {
 	return areas, nil
 }
 
-func (e *Extractor) ocrPage(ctx context.Context, pdfPath, dir string, page int) (string, error) {
+func (e *Extractor) ocrPage(ctx context.Context, pdfPath, dir string, page int, model string) (string, error) {
 	prefix := filepath.Join(dir, "page-"+strconv.Itoa(page))
 	p := strconv.Itoa(page)
 
@@ -156,7 +156,7 @@ func (e *Extractor) ocrPage(ctx context.Context, pdfPath, dir string, page int) 
 	if err != nil {
 		return "", fmt.Errorf("read rendered page: %w", err)
 	}
-	return e.ocr.TranscribeImage(ctx, img)
+	return e.ocr.TranscribeImage(ctx, model, img, "image/png")
 }
 
 func countTextChars(s string) int {

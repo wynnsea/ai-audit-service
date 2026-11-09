@@ -6,13 +6,14 @@ import (
 	"errors"
 	"regexp"
 	"strings"
-
 )
 
 const transcribePrompt = `Transcribe all text on this document page exactly as written, in its original language.
 Do not translate, summarize, correct, or add anything.
 Keep headings, clause numbers (e.g. 5.1, A.8.2, Pasal 3), and list structure, one item per line.
-Output plain text only: no HTML, no code blocks, no coordinates. Tables may use Markdown table syntax.
+Write every table as a Markdown table: one table row per line, with cells separated by |, and keep empty cells empty. Never put each cell on its own line.
+Write form fields as "Label : value" on one line.
+Output plain text only: no HTML, no code blocks, no coordinates.
 Output only the transcribed text, no commentary.`
 
 var codeFence = regexp.MustCompile("(?m)^```.*$")
@@ -41,15 +42,15 @@ type visionRequest struct {
 }
 
 // TranscribeImage dipakai sebagai OCR untuk halaman PDF hasil scan
-func (c *Client) TranscribeImage(ctx context.Context, png []byte) (string, error) {
+func (c *Client) TranscribeImage(ctx context.Context, model string, img []byte, mime string) (string, error) {
 	req := visionRequest{
-		Model: c.cfg.ChatModel,
+		Model: model,
 		Messages: []visionMessage{{
 			Role: "user",
 			Content: []contentPart{
 				{Type: "text", Text: transcribePrompt},
 				{Type: "image_url", ImageURL: &imageURL{
-					URL: "data:image/png;base64," + base64.StdEncoding.EncodeToString(png),
+					URL: "data:" + mime + ";base64," + base64.StdEncoding.EncodeToString(img),
 				}},
 			},
 		}},
@@ -59,7 +60,7 @@ func (c *Client) TranscribeImage(ctx context.Context, png []byte) (string, error
 	}
 
 	var resp chatResponse
-	if err := c.post(ctx, c.cfg.ChatBaseURL+"/chat/completions", c.cfg.ChatModel, req, &resp); err != nil {
+	if err := c.post(ctx, c.cfg.ChatBaseURL+"/chat/completions", model, req, &resp); err != nil {
 		return "", err
 	}
 	if len(resp.Choices) == 0 {

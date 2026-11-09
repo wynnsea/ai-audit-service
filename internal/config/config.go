@@ -25,6 +25,8 @@ type Config struct {
 	EmbedBaseURL	   string
 	RerankBaseURL	   string
 	RerankModel	 	   string		
+	VisionModel        string
+	VisionModels       []string
 }
 
 
@@ -34,6 +36,8 @@ func Load() *Config {
 	}
 
 	chatModel := mustEnv("CHAT_MODEL")
+	// model OCR default; kalau tidak diisi, sama dengan model chat seperti sebelumnya
+	visionModel := getEnv("VISION_MODEL", chatModel)
 	
 	return &Config{
 		Port:        getEnv("PORT", "8080"),
@@ -50,6 +54,8 @@ func Load() *Config {
 		RerankModel:  mustEnv("RERANK_MODEL"),
 		ChatModel:   chatModel,
 		ChatModels: parseModels(os.Getenv("CHAT_MODELS"), chatModel),
+		VisionModel: visionModel,
+		VisionModels: parseModels(os.Getenv("VISION_MODELS"), visionModel),
 	}
 }
 

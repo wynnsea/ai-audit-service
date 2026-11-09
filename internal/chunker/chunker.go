@@ -26,9 +26,12 @@ func Split(pages []entity.Page) []entity.Chunk {
 	var units []unit
 	if looksLikeRegulation(lines) {
 		units = regulationUnits(lines)
+	} else if u, ok := shortOCRDocument(pages, lines); ok {
+		units = []unit{u}
 	} else {
 		units = genericUnits(lines)
 	}
+
 
 	var chunks []entity.Chunk
 	for _, u := range units {
@@ -39,6 +42,34 @@ func Split(pages []entity.Page) []entity.Chunk {
 	}
 	return chunks
 }
+
+// shortOCRDocument: dokumen hasil OCR yang muat dalam satu chunk (misal KK, surat, screenshot)
+// disimpan utuh. Struktur judul hasil OCR tidak bisa diandalkan, dan kalau dipecah per "judul"
+// potongannya kecil-kecil serta kehilangan konteks satu sama lain.
+func shortOCRDocument(pages []entity.Page, lines []line) (unit, bool) {
+	if len(lines) == 0 {
+		return unit{}, false
+	}
+	for _, p := range pages {
+		if !p.OCR {
+			return unit{}, false
+		}
+	}
+	size := 0
+	for _, l := range lines {
+		size += len(l.text) + 1
+	}
+	if size > maxChunkChars {
+		return unit{}, false
+	}
+	// baris pertama biasanya judul dokumen ("KARTU KELUARGA"), tetap ikut di isi chunk
+	section := lines[0].text
+	if r := []rune(section); len(r) > maxHeadingRunes {
+		section = string(r[:maxHeadingRunes])
+	}
+	return unit{section: section, lines: lines, plain: true}, true
+}
+
 
 // peraturan Indonesia (UU, PP, POJK, Permen, ...) selalu tersusun dari Pasal
 func looksLikeRegulation(lines []line) bool {

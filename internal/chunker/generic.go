@@ -37,6 +37,8 @@ var (
 		"untuk": true, "dengan": true, "yang": true, "of": true, "and": true, "the": true,
 		"for": true, "in": true, "on": true, "to": true,
 	}
+	// angka panjang seperti NIK, NIP, atau nomor rekening; baris berisi angka ini adalah data, bukan judul
+	longNumber = regexp.MustCompile(`\d{6,}`)
 )
 
 type heading struct {
@@ -125,6 +127,9 @@ func parseHeading(text string) (heading, bool) {
 			return heading{short: true, title: text}, true
 		}
 	}
+	if isDataLine(text) {
+		return heading{}, false
+	}
 	return heading{}, false
 }
 
@@ -157,5 +162,14 @@ func isCapsHeading(text string) bool {
 	if len(words) == 1 {
 		return singleWordTitle[text]
 	}
+	if isDataLine(text) {
+		return false
+	}
 	return len(words) <= maxHeadingWords
 }
+
+// isDataLine: baris tabel Markdown atau baris berisi angka panjang tidak pernah jadi judul
+func isDataLine(text string) bool {
+	return strings.HasPrefix(text, "|") || longNumber.MatchString(text)
+}
+

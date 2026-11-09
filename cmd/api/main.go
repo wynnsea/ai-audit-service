@@ -42,7 +42,7 @@ func main() {
 
 	store := storage.NewSupabase(cfg.SupabaseURL, cfg.SupabaseServiceKey, cfg.StorageBucket)
 	docRepo := repository.NewDocumentRepository(db)
-	docUC := usecase.NewDocumentUsecase(docRepo, store, ext, chunk, aiClient)
+	docUC := usecase.NewDocumentUsecase(docRepo, store, ext, chunk, aiClient, cfg.VisionModels) // aiClient = embedder
 
 	healthCtrl := controller.NewHealthController(db)
 	docCtrl := controller.NewDocumentController(docUC)

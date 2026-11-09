@@ -14,6 +14,7 @@ type Document struct {
 	FileName       string    `json:"file_name"`
 	StoragePath    string    `json:"-"`
 	RegulationType string    `json:"regulation_type,omitempty"`
+	OCRModel       string    `json:"ocr_model,omitempty"`
 	Status         string    `json:"status"`
 	ErrorMessage   string    `json:"error_message,omitempty"`
 	CreatedAt      time.Time `json:"created_at"`

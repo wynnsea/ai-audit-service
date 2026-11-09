@@ -121,3 +121,25 @@ func TestRegulationStillSplitByPasal(t *testing.T) {
 		t.Fatalf("section regulasi berubah:\n%s", strings.Join(got, "\n"))
 	}
 }
+
+func TestShortOCRDocumentStaysWhole(t *testing.T) {
+	text := "KARTU KELUARGA\nNama Kepala Keluarga : M ARSYAD\n1 M ARSYAD 7602020401760001 LAKI-LAKI\nTIDAK TAHU 2 HUSNA YANTI 7602027112810019 PEREMPUAN"
+	chunks := Split([]entity.Page{{Text: text, OCR: true}})
+	if len(chunks) != 1 || chunks[0].Section != "KARTU KELUARGA" || !strings.Contains(chunks[0].Content, "HUSNA YANTI") {
+		t.Fatalf("got %d chunks: %+v", len(chunks), chunks)
+	}
+}
+
+func TestDataLinesAreNotHeadings(t *testing.T) {
+	var b strings.Builder
+	b.WriteString("DAFTAR ANGGOTA\n")
+	for i := 0; i < 60; i++ {
+		b.WriteString("| 1 | HUSNA YANTI | 7602027112810019 | PEREMPUAN |\n")
+	}
+	b.WriteString("TIDAK TAHU 2 HUSNA YANTI 7602027112810019 PEREMPUAN\n")
+	for _, c := range Split([]entity.Page{{Text: b.String()}}) {
+		if strings.Contains(c.Section, "HUSNA") {
+			t.Fatalf("data jadi judul: %q", c.Section)
+		}
+	}
+}

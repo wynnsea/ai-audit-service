@@ -82,7 +82,7 @@ func readTitle(lines []line, i int, upper bool) (string, int) {
 		if pasalHeading.MatchString(s) || babHeading.MatchString(s) || bagianHeading.MatchString(s) {
 			break
 		}
-		if upper && s != strings.ToUpper(s) {
+		if isDataLine(s) || (upper && s != strings.ToUpper(s)) {
 			break
 		}
 		parts = append(parts, s)
